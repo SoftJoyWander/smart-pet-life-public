@@ -1,0 +1,78 @@
+name: CI
+
+# 這份 workflow 是公開展示版，與私有 repo 的版本不同：
+# 訓練相關的 job 已移除，推論測試改為只涵蓋公開版有收錄的模組。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mobile-typecheck:
+    name: App 型別檢查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Supabase JS 於 2026-06-30 結束 Node.js 20 支援。
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npm run typecheck
+        working-directory: mobile
+
+  stool-service-tests:
+    name: 便便辨識服務契約測試
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      # 只安裝服務層相依。訓練用的 torch 與資料集套件不在公開版範圍內，
+      # CI 也不應為此下載數 GB 內容。
+      - run: pip install -r ml/service-requirements.txt pytest
+      # 由 repo 根目錄以 python -m 執行，讓 ml.service 可被匯入。
+      # ml/tests 沒有 __init__.py，unittest discover 對非套件目錄不可靠。
+      - run: python -m pytest ml/tests -q
+
+  pet-reid-tests:
+    name: Re-ID 評測指標測試
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      # 評測指標與資料集處理不需要 PyTorch，只有實際跑推論才需要。
+      - run: pip install -e . pytest
+        working-directory: ai/pet-reid
+      - run: python -m pytest -q
+        working-directory: ai/pet-reid
+
+  migration-hygiene:
+    name: Migration 檢查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: ./scripts/check-migrations.sh
+
+  secret-scan:
+    name: 秘密掃描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: ./scripts/scan-secrets.sh

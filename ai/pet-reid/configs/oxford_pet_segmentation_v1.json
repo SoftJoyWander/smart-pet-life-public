@@ -1,0 +1,93 @@
+{
+  "schema_version": "pet-foreground-segmentation-config-v1",
+  "release_id": "oxford-iiit-pet-segmentation-v1",
+  "source": {
+    "name": "Oxford-IIIT Pet Dataset",
+    "publisher": "University of Oxford Visual Geometry Group",
+    "dataset_url": "https://www.robots.ox.ac.uk/~vgg/data/pets/",
+    "publication_url": "https://www.robots.ox.ac.uk/~vgg/publications/2012/parkhi12a/",
+    "license": "CC BY-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "copyright_note": "Copyright remains with the original image owners.",
+    "resources": [
+      {
+        "filename": "images.tar.gz",
+        "url": "https://www.robots.ox.ac.uk/~vgg/data/pets/data/images.tar.gz",
+        "md5": "5c4f3ee8e5d25df40f4fd59a7f44e54c"
+      },
+      {
+        "filename": "annotations.tar.gz",
+        "url": "https://www.robots.ox.ac.uk/~vgg/data/pets/data/annotations.tar.gz",
+        "md5": "95a8c909bbe2e81eed6a22bccdf3f68f"
+      }
+    ]
+  },
+  "expected": {
+    "image_count": 7349,
+    "official_split_counts": {
+      "trainval": 3680,
+      "test": 3669
+    },
+    "empty_foreground_count": 14,
+    "empty_foreground_by_official_split": {
+      "trainval": 7,
+      "test": 7
+    },
+    "breed_count": 37,
+    "species_breed_counts": {
+      "cat": 12,
+      "dog": 25
+    }
+  },
+  "seed": 20260829,
+  "split": {
+    "validation_fraction": 0.15,
+    "near_duplicate_dhash_max_distance": 2,
+    "official_test_is_immutable": true
+  },
+  "preprocessing": {
+    "version": "oxford-pet-letterbox-256-foreground-v1",
+    "input_size": [256, 256],
+    "trimap_mapping": {
+      "1": "foreground",
+      "2": "background",
+      "3": "foreground_boundary"
+    },
+    "padding_target": 255,
+    "normalization": "imagenet-mean-std",
+    "training_augmentations": [
+      "random-horizontal-flip-p0.5",
+      "color-jitter-b0.15-c0.15-s0.10"
+    ]
+  },
+  "model": {
+    "architecture": "lraspp_mobilenet_v3_large",
+    "backbone_weights": "IMAGENET1K_V1",
+    "class_count": 2,
+    "classes": ["background", "pet_foreground"]
+  },
+  "training": {
+    "epochs": 8,
+    "batch_size": 16,
+    "num_workers": 0,
+    "cpu_threads": 4,
+    "learning_rate": 0.0005,
+    "weight_decay": 0.0001,
+    "foreground_loss_weight": 1.0
+  },
+  "crop": {
+    "version": "pet-foreground-bbox-pad10-neutral-gray-v1",
+    "foreground_probability_threshold": 0.5,
+    "bbox_padding_ratio": 0.1,
+    "minimum_foreground_fraction": 0.02,
+    "background_rgb": [127, 127, 127]
+  },
+  "intended_use": "Offline pet foreground segmentation and consistent crop generation before dog Re-ID candidate ranking.",
+  "prohibited_claims": [
+    "individual pet identification",
+    "production-ready lost-pet matching",
+    "anti-fraud verification",
+    "Taiwan field-performance validation",
+    "clinical or veterinary interpretation"
+  ]
+}

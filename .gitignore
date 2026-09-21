@@ -1,0 +1,41 @@
+# 這個 repo 是公開的，.gitignore 的角色是最後一道防線而不是第一道。
+# 第一道防線是 scripts/sync-showcase.sh 的白名單——只有明確列出的檔案才會被複製進來。
+
+# 相依套件與建置產物
+node_modules/
+.expo/
+dist/
+dist-*/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+.cache/
+
+# 模型權重、資料集與訓練產出：這些一律不進公開 repo。
+# 副檔名寫得比實際需要更寬，因為漏掉一個的代價遠高於多擋一個。
+*.onnx
+*.pt
+*.pth
+*.npz
+*.tflite
+*.safetensors
+ai/**/data/
+ai/**/outputs/
+ai/**/releases/
+
+# 任何形式的環境設定。.env.example 例外，它只有變數名沒有值。
+.env
+.env.*
+!*.env.example
+!.env.example
+
+# PlatformIO 編譯產物與工具鏈快取
+.pio/
+
+# macOS
+.DS_Store

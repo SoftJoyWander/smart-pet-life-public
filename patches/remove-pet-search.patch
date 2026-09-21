@@ -1,0 +1,468 @@
+--- a/mobile/App.tsx
++++ b/mobile/App.tsx
+@@ -30,7 +30,6 @@
+ import { AuthLoadingScreen, AuthScreen } from './src/features/auth/AuthScreen';
+ import { AppConfirmDialog } from './src/features/AppConfirmDialog';
+ import { MedicalCenterScreen } from './src/features/medical/MedicalCenterScreen';
+-import { PetSearchScreen } from './src/features/pet-search/PetSearchScreen';
+ import { PetOnboardingScreen, type PetOnboardingValue } from './src/features/pets/PetOnboardingScreen';
+ import { CollaborationModal } from './src/features/pets/CollaborationModal';
+ import { WalkFlow } from './src/features/walks/WalkFlow';
+@@ -92,12 +91,11 @@
+   updatePet,
+   uploadPetAvatar,
+ } from './src/services/petData';
+-import { listMyUnreadPetSearchLeads, type PetSearchLeadItem } from './src/services/petSearchData';
+ import { analyzeStoolObservation, createStoolClientRequestKey, createStoolObservation, getStoolReviewerStatus, type StoolAnalysisTrace, uploadAndQueueStoolImage } from './src/services/stoolAnalysis';
+ import { featureFlags } from './src/config/featureFlags';
+ import type { CareRecordRow, MedicationDoseUnit, MedicationPlanRow, MedicationReminderRow, PetInvitationRow, PetRow, PreventiveCareKind, PreventiveCareScheduleRow, StoolObservationRow, WalkSessionRow } from './src/types/database';
+ 
+-type TabKey = 'home' | 'records' | 'search' | 'medical' | 'profile';
++type TabKey = 'home' | 'records' | 'medical' | 'profile';
+ type CameraStep = 'idle' | 'captured' | 'uploading' | 'analysing' | 'awaiting_review' | 'success' | 'error';
+ type PetEntryStep = 'choice' | 'join' | 'create';
+ 
+@@ -593,7 +591,6 @@
+ const tabAvailability: Record<TabKey, boolean> = {
+   home: true,
+   records: featureFlags.recordsTab,
+-  search: featureFlags.searchTab,
+   medical: featureFlags.medicalTab,
+   profile: true,
+ };
+@@ -601,7 +598,6 @@
+ const tabs: { key: TabKey; icon: string; label: string; enabled: boolean }[] = [
+   { key: 'home', icon: '⌂', label: '首頁', enabled: tabAvailability.home },
+   { key: 'records', icon: '▤', label: '紀錄', enabled: tabAvailability.records },
+-  { key: 'search', icon: '⌖', label: '協尋', enabled: tabAvailability.search },
+   { key: 'medical', icon: '✚', label: '醫療', enabled: tabAvailability.medical },
+   { key: 'profile', icon: '♙', label: '我的', enabled: tabAvailability.profile },
+ ];
+@@ -650,8 +646,6 @@
+   const [petAvatarUris, setPetAvatarUris] = useState<Record<string, string>>({});
+   const [selectedPetId, setSelectedPetId] = useState<string | null>(null);
+   const [pendingInvitations, setPendingInvitations] = useState<PetInvitationRow[]>([]);
+-  const [unreadPetSearchLeads, setUnreadPetSearchLeads] = useState<PetSearchLeadItem[]>([]);
+-  const [focusPetSearchLeadId, setFocusPetSearchLeadId] = useState<string | null>(null);
+   const [petDataStatus, setPetDataStatus] = useState<'idle' | 'loading' | 'needsPet' | 'ready' | 'error'>('idle');
+   const [petDataError, setPetDataError] = useState('');
+   const [petDataReloadKey, setPetDataReloadKey] = useState(0);
+@@ -699,15 +693,6 @@
+     setPendingInvitations(invitations);
+   }, [authSession?.user.email, isPreviewMode]);
+ 
+-  const refreshUnreadPetSearchLeads = useCallback(async () => {
+-    if (!currentProfileId || isPreviewMode) {
+-      setUnreadPetSearchLeads([]);
+-      return;
+-    }
+-    const leads = await listMyUnreadPetSearchLeads(currentProfileId);
+-    setUnreadPetSearchLeads(leads);
+-  }, [currentProfileId, isPreviewMode]);
+-
+   useEffect(() => {
+     if (!supabase) {
+       setAuthSession(null);
+@@ -815,49 +800,6 @@
+   }, [authSession?.user.id, authSession?.user.email, isPreviewMode]);
+ 
+   useEffect(() => {
+-    const realtimeClient = supabase;
+-    if (!realtimeClient || !authSession || !currentProfileId || isPreviewMode) {
+-      setUnreadPetSearchLeads([]);
+-      return undefined;
+-    }
+-
+-    let isActive = true;
+-    const syncLeads = async () => {
+-      try {
+-        const leads = await listMyUnreadPetSearchLeads(currentProfileId);
+-        if (isActive) setUnreadPetSearchLeads(leads);
+-      } catch {
+-        // Retry when the App returns to the foreground or messages are opened.
+-      }
+-    };
+-
+-    void syncLeads();
+-    const channel = realtimeClient
+-      .channel(`pet-search-lead-notifications:${currentProfileId}`)
+-      .on(
+-        'postgres_changes',
+-        {
+-          event: '*',
+-          schema: 'public',
+-          table: 'pet_search_leads',
+-          filter: `lost_owner_id=eq.${currentProfileId}`,
+-        },
+-        () => void syncLeads(),
+-      )
+-      .subscribe();
+-
+-    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+-      if (nextState === 'active') void syncLeads();
+-    });
+-
+-    return () => {
+-      isActive = false;
+-      appStateSubscription.remove();
+-      void realtimeClient.removeChannel(channel);
+-    };
+-  }, [authSession?.user.id, currentProfileId, isPreviewMode]);
+-
+-  useEffect(() => {
+     if (authSession === undefined) return undefined;
+ 
+     if (!authSession && isPreviewMode) {
+@@ -1777,9 +1719,8 @@
+               onMessages={() => {
+                 setShowMessages(true);
+                 void refreshPendingInvitations();
+-                void refreshUnreadPetSearchLeads();
+               }}
+-              messageCount={pendingInvitations.length + unreadPetSearchLeads.length}
++              messageCount={pendingInvitations.length}
+               isRefreshing={isRefreshingRecords}
+               onRefresh={() => void refreshAllPetRecords()}
+               onManagePreventiveCare={(kind) => {
+@@ -1860,20 +1801,6 @@
+               }}
+             />
+           )}
+-          {activeTab === 'search' && tabAvailability.search && (
+-            <PetSearchScreen
+-              currentProfileId={currentProfileId}
+-              pets={pets}
+-              selectedPetId={petId}
+-              petAvatarUris={petAvatarUris}
+-              isPreview={isPreviewMode}
+-              focusLeadId={focusPetSearchLeadId}
+-              onLeadFocused={(leadId) => {
+-                setUnreadPetSearchLeads((current) => current.filter((item) => item.lead.id !== leadId));
+-                setFocusPetSearchLeadId(null);
+-              }}
+-            />
+-          )}
+           {activeTab === 'medical' && tabAvailability.medical && (
+             <MedicalCenterScreen
+               embeddedInTab
+@@ -2115,13 +2042,7 @@
+         <MessagesModal
+           visible={showMessages}
+           invitations={pendingInvitations}
+-          petSearchLeads={unreadPetSearchLeads}
+           onClose={() => setShowMessages(false)}
+-          onOpenPetSearchLead={(leadId) => {
+-            setShowMessages(false);
+-            setFocusPetSearchLeadId(leadId);
+-            setActiveTab('search');
+-          }}
+           onAccept={async (invitationId) => {
+             await acceptPetInvitation(invitationId);
+             setPendingInvitations((current) => current.filter((item) => item.id !== invitationId));
+@@ -2229,38 +2150,24 @@
+ function MessagesModal({
+   visible,
+   invitations,
+-  petSearchLeads,
+   onClose,
+   onAccept,
+-  onOpenPetSearchLead,
+ }: {
+   visible: boolean;
+   invitations: PetInvitationRow[];
+-  petSearchLeads: PetSearchLeadItem[];
+   onClose: () => void;
+   onAccept: (id: string) => Promise<void>;
+-  onOpenPetSearchLead: (leadId: string) => void;
+ }) {
+   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+-  const hasMessages = invitations.length > 0 || petSearchLeads.length > 0;
++  const hasMessages = invitations.length > 0;
+   return (
+     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+       <View style={styles.modalBackdrop}>
+         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+         <SafeAreaView edges={['bottom', 'left', 'right']} style={[styles.modalSheet, styles.messagesSheet]}>
+           <View style={styles.modalHandle} />
+-          <View style={styles.messagesHeader}><View><Text style={styles.modalTitle}>訊息</Text><Text style={styles.modalSubtitle}>共同照護邀請與人工協尋線索</Text></View><TouchableOpacity accessibilityRole="button" accessibilityLabel="關閉訊息" onPress={onClose}><Text style={styles.textLink}>完成</Text></TouchableOpacity></View>
++          <View style={styles.messagesHeader}><View><Text style={styles.modalTitle}>訊息</Text><Text style={styles.modalSubtitle}>共同照護邀請</Text></View><TouchableOpacity accessibilityRole="button" accessibilityLabel="關閉訊息" onPress={onClose}><Text style={styles.textLink}>完成</Text></TouchableOpacity></View>
+           {!hasMessages ? <View style={styles.messageEmpty}><Text style={styles.messageEmptyIcon}>✉</Text><Text style={styles.messageEmptyTitle}>目前沒有新訊息</Text></View> : null}
+-          {petSearchLeads.map((item) => (
+-            <View key={item.lead.id} style={styles.messageCard}>
+-              <View style={styles.messageIcon}><Text>👀</Text></View>
+-              <View style={styles.messageContent}>
+-                <Text style={styles.messageTitle}>新的人工協尋線索</Text>
+-                <Text style={styles.messageText}>{item.lead.claim_mode === 'holding' ? '有人表示犬隻目前在身邊' : '有人表示可能看過牠'}；地點為 {item.sightingPost.area_text}。這是使用者回報，尚未確認身分。</Text>
+-              </View>
+-              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`查看 ${item.lostPost.pet_name_snapshot} 的人工線索`} style={styles.messageAccept} onPress={() => onOpenPetSearchLead(item.lead.id)}><Text style={styles.messageAcceptText}>查看</Text></TouchableOpacity>
+-            </View>
+-          ))}
+           {invitations.map((item) => (
+             <View key={item.id} style={styles.messageCard}>
+               <View style={styles.messageIcon}><Text>🐾</Text></View>
+--- a/mobile/src/types/database.ts
++++ b/mobile/src/types/database.ts
+@@ -21,49 +21,6 @@
+ export type MedicalEntityType = 'medical_visit' | 'medical_document' | 'diagnostic_report' | 'diagnostic_result';
+ export type StoolAnalysisStatus = 'awaiting_upload' | 'queued' | 'analysing' | 'awaiting_human_review' | 'completed' | 'failed' | 'cancelled' | 'deletion_requested' | 'deleted';
+ export type StoolPresenceResult = 'present' | 'absent' | 'uncertain' | 'not_assessable';
+-export type PetSearchPostType = 'lost' | 'sighting';
+-export type PetSearchPostStatus = 'draft' | 'active' | 'resolved' | 'archived';
+-export type PetSearchAiStatus = 'not_requested' | 'awaiting_model' | 'queued' | 'processing' | 'shadow_completed' | 'completed' | 'failed';
+-export type PetSearchMediaViewType = 'front' | 'back' | 'left' | 'right' | 'detail' | 'unknown';
+-export type PetSearchMediaQualityStatus = 'suitable' | 'limited' | 'unassessed';
+-export type PetSearchMediaQualitySource = 'uploader_reported' | 'not_assessed';
+-export type PetMatchReviewStatus = 'pending' | 'possible' | 'dismissed' | 'confirmed';
+-export type PetSearchLeadClaimMode = 'seen' | 'holding';
+-export type PetSearchLeadReviewStatus = 'pending' | 'possible' | 'dismissed';
+-export type PetSearchLeadSourceType = 'user_reported';
+-export type PetSearchVerificationFeatureCode =
+-  | 'front_paw_marking'
+-  | 'hind_paw_marking'
+-  | 'body_side_marking'
+-  | 'tail_tip_color'
+-  | 'ear_pattern'
+-  | 'chest_marking';
+-export type PetSearchVerificationResultStatus = 'high_consistency' | 'partial_consistency' | 'not_verified';
+-export type PetSearchVerificationAttemptStatus = 'pending' | 'submitted' | 'expired';
+-
+-export type PetSearchVerificationQuestion = {
+-  position: number;
+-  feature_code: PetSearchVerificationFeatureCode;
+-  option_codes: string[];
+-};
+-
+-export type PetSearchVerificationAttemptPayload = {
+-  attempt_id: string;
+-  status: PetSearchVerificationAttemptStatus;
+-  result_status: PetSearchVerificationResultStatus | null;
+-  expires_at: string;
+-  question_set_version: string;
+-  questions: PetSearchVerificationQuestion[];
+-};
+-
+-export type PetSearchVerificationResultSummary = {
+-  attempt_id: string;
+-  sighting_post_id: string;
+-  result_status: PetSearchVerificationResultStatus;
+-  submitted_at: string;
+-  question_set_version: string;
+-};
+-
+ export type ProfileRow = {
+   id: string;
+   auth_user_id: string;
+@@ -140,85 +97,6 @@
+   latest_confidence: number | null;
+   failure_code: string | null;
+   schema_version: string;
+-  created_at: string;
+-  updated_at: string;
+-};
+-
+-export type PetSearchPostRow = {
+-  id: string;
+-  owner_id: string;
+-  pet_id: string | null;
+-  post_type: PetSearchPostType;
+-  status: PetSearchPostStatus;
+-  pet_name_snapshot: string;
+-  species: 'dog';
+-  breed_snapshot: string | null;
+-  sex_snapshot: 'male' | 'female' | 'unknown';
+-  title: string;
+-  description: string;
+-  distinguishing_features: string;
+-  area_text: string;
+-  occurred_at: string;
+-  occurred_timezone: string;
+-  cover_media_path: string | null;
+-  ai_status: PetSearchAiStatus;
+-  client_request_key: string;
+-  published_at: string | null;
+-  resolved_at: string | null;
+-  created_at: string;
+-  updated_at: string;
+-};
+-
+-export type PetSearchMediaRow = {
+-  id: string;
+-  post_id: string;
+-  uploaded_by: string;
+-  storage_path: string;
+-  content_type: 'image/jpeg' | 'image/png' | 'image/webp';
+-  byte_size: number;
+-  position: number;
+-  is_cover: boolean;
+-  capture_method: 'live_camera' | 'gallery_upload';
+-  view_type: PetSearchMediaViewType;
+-  quality_status: PetSearchMediaQualityStatus;
+-  quality_source: PetSearchMediaQualitySource;
+-  face_visible: boolean | null;
+-  body_mostly_visible: boolean | null;
+-  created_at: string;
+-};
+-
+-export type PetMatchCandidateRow = {
+-  id: string;
+-  lost_post_id: string;
+-  sighting_post_id: string;
+-  lost_owner_id: string;
+-  rank: number;
+-  similarity_score: number;
+-  score_kind: string;
+-  model_version: string;
+-  preprocessing_version: string;
+-  threshold_set_version: string | null;
+-  source_match_run_id: number | null;
+-  aggregation_version: string | null;
+-  retired_at: string | null;
+-  review_status: PetMatchReviewStatus;
+-  reviewed_at: string | null;
+-  created_at: string;
+-  updated_at: string;
+-};
+-
+-export type PetSearchLeadRow = {
+-  id: string;
+-  lost_post_id: string;
+-  sighting_post_id: string;
+-  lost_owner_id: string;
+-  reporter_id: string;
+-  claim_mode: PetSearchLeadClaimMode;
+-  source_type: PetSearchLeadSourceType;
+-  review_status: PetSearchLeadReviewStatus;
+-  owner_viewed_at: string | null;
+-  reviewed_at: string | null;
+-  schema_version: 'pet-search-lead-v1';
+   created_at: string;
+   updated_at: string;
+ };
+@@ -518,30 +396,6 @@
+         Update: Partial<StoolObservationRow>;
+         Relationships: [];
+       };
+-      pet_search_posts: {
+-        Row: PetSearchPostRow;
+-        Insert: Insertable<PetSearchPostRow, 'id' | 'pet_id' | 'status' | 'species' | 'breed_snapshot' | 'sex_snapshot' | 'description' | 'distinguishing_features' | 'cover_media_path' | 'ai_status' | 'published_at' | 'resolved_at' | 'created_at' | 'updated_at'>;
+-        Update: Partial<PetSearchPostRow>;
+-        Relationships: [];
+-      };
+-      pet_search_media: {
+-        Row: PetSearchMediaRow;
+-        Insert: Insertable<PetSearchMediaRow, 'id' | 'position' | 'is_cover' | 'capture_method' | 'view_type' | 'quality_status' | 'quality_source' | 'face_visible' | 'body_mostly_visible' | 'created_at'>;
+-        Update: Partial<PetSearchMediaRow>;
+-        Relationships: [];
+-      };
+-      pet_match_candidates: {
+-        Row: PetMatchCandidateRow;
+-        Insert: Insertable<PetMatchCandidateRow, 'id' | 'threshold_set_version' | 'source_match_run_id' | 'aggregation_version' | 'retired_at' | 'review_status' | 'reviewed_at' | 'created_at' | 'updated_at'>;
+-        Update: Partial<PetMatchCandidateRow>;
+-        Relationships: [];
+-      };
+-      pet_search_leads: {
+-        Row: PetSearchLeadRow;
+-        Insert: Insertable<PetSearchLeadRow, 'id' | 'source_type' | 'review_status' | 'owner_viewed_at' | 'reviewed_at' | 'schema_version' | 'created_at' | 'updated_at'>;
+-        Update: Partial<PetSearchLeadRow>;
+-        Relationships: [];
+-      };
+       walk_sessions: {
+         Row: WalkSessionRow;
+         Insert: Insertable<WalkSessionRow, 'id' | 'average_speed_mps' | 'weight_kg_snapshot' | 'energy_kcal_low' | 'energy_kcal_high' | 'energy_model_version' | 'stool_count' | 'urine_count' | 'created_at'>;
+@@ -731,76 +585,6 @@
+       refresh_medication_reminders: { Args: { target_pet_id: string }; Returns: MedicationReminderRow[] };
+       complete_medication_reminder: { Args: { reminder_id: string; actual_administered_at?: string }; Returns: MedicationReminderRow };
+       resolve_missed_medication_reminder: { Args: { reminder_id: string; was_administered: boolean; actual_administered_at?: string }; Returns: MedicationReminderRow };
+-      create_pet_search_post: {
+-        Args: {
+-          search_post_type: PetSearchPostType;
+-          search_pet_id: string | null;
+-          search_client_request_key: string;
+-          search_area_text: string;
+-          search_description: string;
+-          search_distinguishing_features: string;
+-          search_occurred_at: string;
+-          search_occurred_timezone: string;
+-          search_sighting_breed?: string | null;
+-          search_sighting_sex?: 'male' | 'female' | 'unknown';
+-        };
+-        Returns: PetSearchPostRow;
+-      };
+-      publish_pet_search_post: {
+-        Args: {
+-          search_post_id: string;
+-          search_media_path: string;
+-          search_content_type: PetSearchMediaRow['content_type'];
+-          search_byte_size: number;
+-          search_capture_method?: PetSearchMediaRow['capture_method'];
+-        };
+-        Returns: PetSearchPostRow;
+-      };
+-      publish_pet_search_post_v2: {
+-        Args: {
+-          search_post_id: string;
+-          search_media: Json;
+-        };
+-        Returns: PetSearchPostRow;
+-      };
+-      publish_pet_search_post_v3: {
+-        Args: {
+-          search_post_id: string;
+-          search_media: Json;
+-          search_linked_lost_post_id?: string | null;
+-          search_claim_mode?: PetSearchLeadClaimMode;
+-        };
+-        Returns: PetSearchPostRow;
+-      };
+-      resolve_pet_search_post: { Args: { search_post_id: string }; Returns: PetSearchPostRow };
+-      review_pet_match_candidate: {
+-        Args: { search_candidate_id: string; search_review_status: Exclude<PetMatchReviewStatus, 'pending'> };
+-        Returns: PetMatchCandidateRow;
+-      };
+-      configure_pet_search_verification: {
+-        Args: { search_lost_post_id: string; search_questions: Json; owner_attested_not_public: boolean };
+-        Returns: Json;
+-      };
+-      start_pet_search_verification_attempt: {
+-        Args: { search_lost_post_id: string; search_sighting_post_id: string; request_key: string };
+-        Returns: Json;
+-      };
+-      submit_pet_search_verification_attempt: {
+-        Args: { target_attempt_id: string; search_responses: Json };
+-        Returns: Json;
+-      };
+-      list_pet_search_verification_results: {
+-        Args: { search_lost_post_id: string };
+-        Returns: Json;
+-      };
+-      mark_pet_search_lead_viewed: {
+-        Args: { search_lead_id: string };
+-        Returns: PetSearchLeadRow;
+-      };
+-      review_pet_search_lead: {
+-        Args: { search_lead_id: string; search_review_status: Exclude<PetSearchLeadReviewStatus, 'pending'> };
+-        Returns: PetSearchLeadRow;
+-      };
+     };
+     Enums: {
+       care_record_kind: CareRecordKind;
+--- a/mobile/src/config/featureFlags.ts
++++ b/mobile/src/config/featureFlags.ts
+@@ -5,7 +5,6 @@
+ 
+ export const featureFlags = {
+   recordsTab: envFlag(process.env.EXPO_PUBLIC_ENABLE_RECORDS_TAB, true),
+-  searchTab: envFlag(process.env.EXPO_PUBLIC_ENABLE_SEARCH_TAB, true),
+   medicalTab: envFlag(process.env.EXPO_PUBLIC_ENABLE_MEDICAL_TAB, true),
+   stoolGalleryUpload: envFlag(process.env.EXPO_PUBLIC_ENABLE_STOOL_GALLERY_UPLOAD, true),
+   stoolExperiment: envFlag(process.env.EXPO_PUBLIC_ENABLE_STOOL_EXPERIMENT, true),
+--- a/mobile/package.json
++++ b/mobile/package.json
+@@ -36,7 +36,6 @@
+     "android": "expo start --android",
+     "ios": "expo start --ios",
+     "web": "expo start --web",
+-    "test:pet-search:accounts": "node ./scripts/seed-pet-search-test-accounts.mjs",
+     "typecheck": "tsc --noEmit"
+   },
+   "private": true

@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "Smart Pet Life",
+    "slug": "smart-pet-life",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "smartpetlife",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "life.smartpet.app"
+    },
+    "android": {
+      "package": "life.smartpet.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允許 Smart Pet Life 使用相機，以拍攝寵物頭像或即時拍攝便便進行現場驗證。",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允許 Smart Pet Life 讀取你選擇的照片，作為寵物頭像或便便存在辨識。",
+          "cameraPermission": "允許 Smart Pet Life 使用相機拍攝寵物頭像。",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "允許 Smart Pet Life 在遛狗期間使用定位，以計算路程並在手機上繪製路線。",
+          "locationAlwaysAndWhenInUsePermission": "允許 Smart Pet Life 在遛狗期間持續使用定位，讓鎖定螢幕或切換 App 時仍可記錄；完成後原始座標不會上傳。",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "47793d4b-f596-4148-96f4-b0e8820f10bf"
+      }
+    },
+    "owner": "softjoywander"
+  }
+}

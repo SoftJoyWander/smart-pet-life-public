@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-pet-life-pet-reid-showcase"
+version = "0.1.0"
+description = "Public-dataset tooling and evaluation harness for the Smart Pet Life dog Re-ID work"
+readme = "README.md"
+requires-python = ">=3.11"
+# 核心相依刻意壓到最小：只做資料集稽核與評測指標的話不需要 PyTorch，
+# 這樣別人要看評測邏輯不必先裝兩 GB 的東西。
+dependencies = [
+  "numpy>=2,<3",
+  "Pillow>=11,<13",
+]
+
+[project.optional-dependencies]
+# 要實際跑推論或訓練分割模型才需要這組。
+torch = [
+  "torch>=2.6,<3",
+  "torchvision>=0.21,<1",
+]
+
+[project.scripts]
+pet-reid-tool = "pet_reid_tool.cli:main"
+pet-reid-serve = "pet_reid_tool.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

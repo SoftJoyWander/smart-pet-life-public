@@ -1,0 +1,2 @@
+-- Remote deployment batch marker.
+-- The complete replayable schema is in 20260815064959_pet_medical_platform_rls_core.sql.
