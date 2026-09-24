@@ -35,12 +35,25 @@ echo
 # copy_file <來源 repo> <相對路徑> [目的地相對路徑]
 # 只複製單一檔案，來源不存在就直接報錯停止：白名單裡的檔案消失通常代表私有 repo
 # 改過結構，靜靜跳過會讓公開 repo 悄悄變得不完整。
+#
+# 關鍵：內容取自來源 repo 的 HEAD，不是工作區的檔案。
+#   讀工作區會把私有 repo 裡「做到一半、還沒提交」的修改一起帶進公開 repo。
+#   公開 repo 是對外的門面，只應該出現作者已經確認並提交的內容；要發布新進度，
+#   先在私有 repo 提交，再跑同步。
 copy_file() {
   local src_repo="$1" rel="$2" dest_rel="${3:-$2}"
-  local src="$src_repo/$rel" dst="$DEST/$dest_rel"
-  [ -f "$src" ] || { echo "來源檔案不存在：$src" >&2; exit 1; }
+  local dst="$DEST/$dest_rel"
   mkdir -p "$(dirname "$dst")"
-  cp "$src" "$dst"
+  (cd "$src_repo" && git show "HEAD:$rel") > "$dst" 2>/dev/null || {
+    echo "HEAD 裡找不到這個檔案：$src_repo/$rel（若是新檔案，請先在來源 repo 提交）" >&2
+    rm -f "$dst"
+    exit 1
+  }
+  # git show 不會帶出檔案權限，但 CI 會直接執行 scripts/*.sh，
+  # 少了執行位元會讓 workflow 以 permission denied 失敗，所以照 index 補回來。
+  if [ "$(cd "$src_repo" && git ls-files -s -- "$rel" | awk '{print $1}')" = "100755" ]; then
+    chmod +x "$dst"
+  fi
 }
 
 # copy_dir <來源 repo> <相對目錄> [目的地相對目錄]
